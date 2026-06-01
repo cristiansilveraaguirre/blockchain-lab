@@ -4,45 +4,73 @@ import { ethers } from 'ethers';
 
 @Injectable()
 export class BlockchainService implements OnModuleInit {
-  private provider: any;
-  private contract: any;
+  private provider: ethers.JsonRpcProvider;
+  private wallet: ethers.Wallet;
+  private readContract: ethers.Contract;
 
   constructor(private configService: ConfigService) {}
 
   async onModuleInit() {
-    // Obtener la URL de RPC desde .env
+    // =========================
+    // 1. ENV VARIABLES
+    // =========================
     const rpcUrl = this.configService.get<string>('RPC_URL');
-    
-    // Conectar a la red Sepolia
+    const privateKey = this.configService.get<string>('PRIVATE_KEY');
+
+    if (!rpcUrl) {
+      throw new Error('RPC_URL no configurada en .env');
+    }
+
+    if (!privateKey) {
+      throw new Error('PRIVATE_KEY no configurada en .env');
+    }
+
+    // =========================
+    // 2. PROVIDER (Alchemy / Sepolia)
+    // =========================
     this.provider = new ethers.JsonRpcProvider(rpcUrl);
-    
-    // ABI del contrato USDC
+
+    // =========================
+    // 3. WALLET (firmante)
+    // =========================
+    this.wallet = new ethers.Wallet(privateKey, this.provider);
+
+    console.log(`🔐 Wallet cargada: ${this.wallet.address}`);
+
+    // =========================
+    // 4. CONTRACT (READ ONLY)
+    // =========================
     const abi = [
-      "function name() view returns (string)",
-      "function symbol() view returns (string)",
-      "function totalSupply() view returns (uint256)"
+      'function name() view returns (string)',
+      'function symbol() view returns (string)',
+      'function totalSupply() view returns (uint256)',
     ];
-    
-    // Dirección del contrato USDC en Sepolia
-    const address = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238";
-    
-    // Conectar al contrato
-    this.contract = new ethers.Contract(address, abi, this.provider);
-    
+
+    const address = '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238';
+
+    this.readContract = new ethers.Contract(
+      address,
+      abi,
+      this.provider,
+    );
+
     console.log('✅ Conectado a Sepolia');
     console.log(`📄 Contrato USDC: ${address}`);
   }
 
-  async getName() {
-    return await this.contract.name();
+  // =========================
+  // READ METHODS
+  // =========================
+  async getName(): Promise<string> {
+    return await this.readContract.name();
   }
 
-  async getSymbol() {
-    return await this.contract.symbol();
+  async getSymbol(): Promise<string> {
+    return await this.readContract.symbol();
   }
 
-  async getTotalSupply() {
-    const supply = await this.contract.totalSupply();
+  async getTotalSupply(): Promise<string> {
+    const supply = await this.readContract.totalSupply();
     return ethers.formatUnits(supply, 6);
   }
 
@@ -50,14 +78,45 @@ export class BlockchainService implements OnModuleInit {
     const [name, symbol, totalSupply] = await Promise.all([
       this.getName(),
       this.getSymbol(),
-      this.getTotalSupply()
+      this.getTotalSupply(),
     ]);
 
     return {
       name,
       symbol,
       totalSupply,
-      network: 'Sepolia'
+      network: 'Sepolia',
     };
+  }
+
+  // =========================
+  // WRITE METHOD (ETH TRANSFER)
+  // =========================
+  async transferEth(to: string, amount: string) {
+    try {
+      if (!ethers.isAddress(to)) {
+        throw new Error('Dirección inválida');
+      }
+
+      const tx = await this.wallet.sendTransaction({
+        to,
+        value: ethers.parseEther(amount),
+      });
+
+      console.log('📨 Tx enviada:', tx.hash);
+
+      const receipt = await tx.wait();
+
+      console.log('✅ Bloque minado:', receipt?.blockNumber);
+
+      return {
+        txHash: tx.hash,
+        status: receipt?.status,
+        blockNumber: receipt?.blockNumber,
+      };
+    } catch (error) {
+      console.error('❌ Error en transferencia:', error);
+      throw error;
+    }
   }
 }
