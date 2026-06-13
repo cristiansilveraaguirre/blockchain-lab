@@ -1,17 +1,15 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { BlockchainModule } from './blockchain/blockchain.module';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
+import { IpfsModule } from './ipfs/ipfs.module';
+import { IpfsController } from './ipfs/ipfs.controller';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({
-      isGlobal: true,
-    }),
+    ConfigModule.forRoot({ isGlobal: true }),
     BlockchainModule,
+    IpfsModule,
   ],
-  controllers: [AppController],
-  providers: [AppService],
+  controllers: [IpfsController],
 })
 export class AppModule {}
